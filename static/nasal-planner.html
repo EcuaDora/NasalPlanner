@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NASAL UNWRAP</title>
+  <link rel="stylesheet" href="css/fonts.css">
+  <link rel="stylesheet" href="css/app.css">
+  <style>
+    /* Подсветка drop-зоны, когда над окном тянут файлы.
+       Класс .drag-active вешает/снимает file-loader.js. */
+    body.drag-active .viewport {
+      outline: 2px dashed var(--accent, #4a9eff);
+      outline-offset: -6px;
+    }
+    body.drag-active .empty-state {
+      background: rgba(74, 158, 255, 0.05);
+      transition: background 0.12s ease;
+    }
+
+    /* Статус входных данных — рендерит file-loader.js.
+       Шрифт наследуем от карточки, чтобы было единообразно с
+       "Исходный файл" и "Управление". */
+    #inputsInfo {
+      font: inherit;
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    #inputsInfo .src-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 5px 0;
+    }
+    #inputsInfo .src-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      border: 1.5px solid var(--accent, #4a9eff);
+      box-sizing: border-box;
+      transition: background 0.18s ease, box-shadow 0.18s ease;
+    }
+    #inputsInfo .src-row.ok .src-dot {
+      background: var(--accent, #4a9eff);
+      box-shadow: 0 0 0 3px rgba(74, 158, 255, 0.18);
+    }
+    #inputsInfo .src-row.pending .src-dot {
+      background: transparent;
+      opacity: 0.55;
+    }
+    #inputsInfo .src-lab {
+      min-width: 88px;
+      opacity: 0.72;
+    }
+    #inputsInfo .src-name {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    #inputsInfo .src-row.pending .src-name {
+      opacity: 0.5;
+    }
+
+    /* Карточка "Управление" появляется только после загрузки OBJ.
+       Класс obj-ready вешает file-loader.js на window.'data:change'. */
+    #controlsCard { display: none; }
+    body.obj-ready #controlsCard { display: block; }
+  </style>
+  <!-- Все скрипты с defer: загружаются параллельно, выполняются
+       по порядку после парсинга HTML — не блокируют рендеринг. -->
+  <script defer src="js/lib/three.min.js"></script>
+  <script defer src="js/lib/saddle-seg.js"></script>
+  <script defer src="js/core/bootstrap.js"></script>
+  <script defer src="js/core/modules.js"></script>
+  <script defer src="js/core/state.js"></script>
+  <script defer src="js/core/utils.js"></script>
+  <script defer src="js/core/theme.js"></script>
+  <script defer src="js/core/tabs.js"></script>
+  <script defer src="js/geom/face-geom.js"></script>
+  <script defer src="js/io/obj-parser.js"></script>
+  <script defer src="js/io/ct-loader.js"></script>
+  <script defer src="js/io/file-loader.js"></script>
+  <script defer src="js/render3d/viewer.js"></script>
+  <script defer src="js/ui/file-dialog.js"></script>
+  <script defer src="js/tabs/tab1-data.js"></script>
+  <script defer src="js/tabs/tab2-inner.js"></script>
+  <script defer src="js/tabs/tab3-zones.js"></script>
+  <script defer src="js/tabs/tab4-unfold.js"></script>
+  <script src="js/io/bootstrap-from-session.js"></script>
+  <script defer src="js/init.js"></script>
+</head>
+<body class="light-theme">
+<div class="app">
+
+  <!-- ═══ HEADER ═══ -->
+  <div class="header">
+    <div class="header-left">
+      <div class="logo">
+        <svg width="45" height="45" viewBox="-1406 184 10118 10118" xmlns="http://www.w3.org/2000/svg">
+          <g transform="translate(0,11380) scale(1,-1)" fill="currentColor" stroke="none" opacity="0.9">
+            <path d="M3486 10082 c-4 -8 -66 -162 -141 -357 -50 -129 -95 -309 -109 -440 -5 -47 12 -185 47 -370 49 -263 51 -500 6 -705 -6 -25 -17 -83 -25 -130 -8 -47 -28 -139 -44 -205 -61 -253 -80 -331 -85 -370 -4 -22 -12 -65 -20 -95 -61 -243 -89 -608 -64 -850 7 -69 13 -156 14 -195 3 -75 27 -280 50 -410 7 -44 19 -123 25 -175 6 -52 16 -117 21 -145 5 -27 11 -125 14 -216 2 -91 12 -213 21 -270 18 -117 30 -226 43 -409 5 -69 15 -199 21 -290 14 -184 8 -663 -10 -795 -13 -98 -27 -151 -78 -280 -88 -227 -195 -391 -330 -510 -163 -144 -397 -253 -666 -311 -82 -17 -346 -33 -471 -28 -124 5 -323 40 -425 76 -167 59 -190 61 -190 14 0 -30 42 -65 164 -134 84 -48 310 -148 386 -171 230 -68 380 -85 593 -65 274 25 341 34 457 59 139 30 251 53 474 95 156 30 188 33 380 34 272 1 329 -6 541 -69 166 -49 331 -92 390 -100 28 -4 77 -13 110 -21 33 -7 86 -15 118 -18 31 -3 61 -7 66 -10 5 -3 60 -10 123 -16 258 -22 575 42 848 171 322 153 503 270 487 312 -10 27 -47 20 -148 -29 -166 -81 -337 -142 -501 -180 -92 -21 -132 -24 -290 -24 -217 0 -319 14 -508 71 -173 52 -223 76 -390 194 -108 75 -179 149 -270 280 -41 59 -145 261 -170 330 -79 218 -126 378 -149 510 -25 142 -37 577 -22 756 36 412 60 599 131 1044 11 72 22 153 25 180 3 28 9 64 14 80 15 48 33 318 47 675 7 191 -10 544 -32 669 -23 133 -84 397 -115 499 -11 35 -24 95 -30 135 -17 119 -26 168 -42 247 -82 399 -86 444 -58 630 27 177 33 247 33 390 1 176 -14 284 -68 481 -34 127 -128 418 -146 452 -9 18 -43 23 -52 9z"/>
+            <path d="M4486 9589 c-93 -62 -318 -335 -409 -498 -74 -132 -135 -295 -163 -438 -22 -110 -25 -145 -20 -248 8 -148 25 -265 69 -465 38 -171 76 -311 112 -410 63 -172 86 -384 86 -795 1 -446 -30 -766 -105 -1102 -14 -62 -30 -152 -36 -200 -7 -48 -18 -113 -25 -143 -13 -54 -44 -251 -44 -280 1 -8 -2 -49 -5 -90 -7 -89 -7 -496 -1 -700 15 -485 85 -734 312 -1115 66 -109 128 -177 236 -256 96 -70 327 -174 442 -199 22 -4 78 -16 125 -26 136 -29 473 -18 649 22 110 25 369 121 447 165 102 59 108 63 249 182 254 213 351 435 300 687 -23 113 -92 290 -125 320 -3 3 -12 18 -20 34 -24 46 -243 269 -307 312 -32 21 -63 44 -70 50 -27 25 -182 93 -232 102 -103 18 -181 -34 -167 -112 7 -34 59 -109 135 -192 130 -144 221 -379 205 -534 -8 -83 -21 -113 -80 -189 -77 -99 -214 -181 -362 -217 -147 -35 -431 5 -583 81 -60 31 -187 125 -237 176 -60 61 -124 160 -138 212 -25 96 -55 348 -51 432 10 212 61 331 214 498 60 66 416 336 546 415 34 21 88 58 119 82 31 25 78 58 105 75 54 33 188 147 218 185 11 14 45 53 75 86 107 119 147 190 195 340 17 54 22 158 10 209 -11 43 -82 177 -118 221 -156 189 -474 325 -757 324 -156 -1 -251 -40 -249 -103 1 -66 51 -122 169 -191 32 -19 92 -62 133 -96 85 -70 118 -125 142 -242 38 -178 -4 -300 -140 -411 -88 -71 -157 -103 -250 -115 -99 -13 -177 -2 -249 33 -140 68 -190 157 -220 391 -20 149 -20 313 0 479 32 278 43 438 43 630 -1 286 -8 325 -125 645 -37 102 -82 226 -99 275 -93 258 -136 479 -135 709 0 268 42 413 224 776 84 166 93 193 72 225 -22 33 -53 32 -110 -6z"/>
+            <path d="M2356 9578 c-18 -25 -18 -25 66 -107 74 -72 97 -105 159 -226 79 -155 120 -281 144 -438 17 -113 20 -376 6 -457 -49 -272 -64 -335 -124 -500 -35 -98 -95 -225 -128 -272 -11 -14 -33 -59 -50 -100 -16 -40 -34 -82 -39 -93 -5 -11 -21 -63 -36 -115 -32 -112 -42 -235 -32 -382 9 -120 84 -512 122 -633 61 -193 72 -414 26 -509 -29 -61 -118 -142 -198 -179 -63 -30 -74 -32 -182 -32 -106 0 -120 2 -178 29 -76 35 -120 82 -171 183 -63 127 -85 212 -84 326 2 86 5 106 28 150 36 69 117 152 185 188 55 30 103 61 151 98 33 26 55 104 40 143 -15 40 -97 93 -173 112 -163 40 -392 -2 -538 -98 -101 -67 -221 -188 -257 -261 -81 -160 -96 -339 -42 -498 46 -138 80 -189 213 -321 132 -129 246 -223 472 -385 200 -144 281 -210 394 -323 174 -174 290 -351 324 -498 23 -98 31 -261 17 -365 -13 -89 -55 -250 -72 -271 -5 -6 -15 -29 -23 -50 -35 -101 -160 -257 -261 -328 -68 -47 -115 -71 -235 -118 -154 -60 -324 -48 -533 38 -138 56 -178 89 -222 179 -61 124 -61 250 0 489 18 71 95 231 128 266 40 43 133 173 156 217 27 54 28 122 1 150 -48 53 -174 56 -258 7 -84 -49 -257 -209 -312 -290 -8 -12 -45 -64 -82 -116 -66 -93 -154 -251 -177 -318 -20 -60 -31 -218 -20 -300 27 -197 59 -274 169 -412 107 -132 241 -229 441 -318 220 -98 386 -125 714 -117 191 5 234 9 325 32 220 54 461 208 580 370 129 176 184 279 241 455 80 245 99 479 74 910 -9 146 -20 353 -25 460 -6 107 -14 249 -20 315 -22 265 -30 350 -35 365 -2 8 -9 64 -15 124 -5 60 -14 134 -20 165 -39 220 -64 358 -80 436 -57 274 -71 395 -64 549 8 165 15 198 101 456 87 261 105 327 127 470 54 352 71 688 41 843 -21 113 -97 325 -160 452 -119 238 -283 403 -453 455 -85 27 -127 26 -146 -2z"/>
+          </g>
+        </svg>
+      </div>
+      <div>
+        <div class="header-title">Nasal Unwrap</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="theme-switch">
+        <span class="theme-switch-label" id="labelDark">DARK</span>
+        <div class="switch-track" id="themeToggle" title="Переключить тему">
+          <span class="switch-icon icon-moon"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M10.5 8.5A5 5 0 115.5 3.5a4 4 0 005 5z" stroke="currentColor" stroke-width="1.3" fill="currentColor" fill-opacity="0.1"/></svg></span>
+          <span class="switch-icon icon-sun"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="3" stroke="currentColor" stroke-width="1.3"/><line x1="11.50" y1="7.00" x2="12.80" y2="7.00" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><line x1="10.18" y1="10.18" x2="11.10" y2="11.10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><line x1="7.00" y1="11.50" x2="7.00" y2="12.80" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><line x1="3.82" y1="10.18" x2="2.90" y2="11.10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><line x1="2.50" y1="7.00" x2="1.20" y2="7.00" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><line x1="3.82" y1="3.82" x2="2.90" y2="2.90" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><line x1="7.00" y1="2.50" x2="7.00" y2="1.20" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><line x1="10.18" y1="3.82" x2="11.10" y2="2.90" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg></span>
+        </div>
+        <span class="theme-switch-label active" id="labelLight">LIGHT</span>
+      </div>
+      <div class="file-badge" id="fileBadge"><span class="dot"></span><span class="fn" id="fileName"></span></div>
+
+      <input type="file" id="fileInput" accept=".obj" style="display:none">
+
+
+    </div>
+  </div>
+
+  <!-- ═══ TAB STRIP ═══ -->
+  <div class="tab-strip" id="tabStrip">
+    <button class="tab active" data-tab="data"><span class="tab-idx">01</span>Данные</button>
+    <button class="tab" data-tab="inner" disabled><span class="tab-idx">02</span>Поверхность</button>
+    <button class="tab" data-tab="zones" disabled><span class="tab-idx">03</span>Сегментация</button>
+    <button class="tab" data-tab="unfold" disabled><span class="tab-idx">04</span>Развёртка</button>
+  </div>
+
+  <!-- ═══ BODY — 4 STAGES ═══ -->
+  <div class="body">
+
+    <!-- Stage 01: DATA -->
+    <div class="stage active" data-stage="data">
+      <div class="panel left">
+        <div class="card">
+          <div class="card-title">Исходный файл<span class="badge" id="srcBadge">—</span></div>
+          <div id="srcInfo"></div>
+        </div>
+
+        <div class="card" id="controlsCard">
+          <div class="card-title">Управление</div>
+          <div class="hint-text dim" style="line-height:1.65">
+            <span class="accent">ЛКМ + тяга</span>  — вращение<br>
+            <span class="accent">ПКМ</span> (или Shift+ЛКМ) — сдвиг<br>
+            <span class="accent">Колесо</span> — масштаб<br>
+            <span class="accent">2× ЛКМ</span> — вернуться к центру
+          </div>
+        </div>
+
+
+
+
+
+      </div>
+
+      <div class="workarea">
+        <div class="viewport">
+          <div class="corner-deco tl"></div>
+          <div class="corner-deco tr"></div>
+          <div class="corner-deco bl"></div>
+          <div class="corner-deco br"></div>
+
+          <canvas id="gl3d"></canvas>
+
+          <div class="empty-state" id="emptyState">
+            <div class="empty-icon">
+              <svg width="150" height="150" viewBox="-1406 184 10118 10118" xmlns="http://www.w3.org/2000/svg">
+                <g transform="translate(0,11380) scale(1,-1)" fill="currentColor" stroke="none" opacity="0.55">
+                  <path d="M3486 10082 c-4 -8 -66 -162 -141 -357 -50 -129 -95 -309 -109 -440 -5 -47 12 -185 47 -370 49 -263 51 -500 6 -705 -6 -25 -17 -83 -25 -130 -8 -47 -28 -139 -44 -205 -61 -253 -80 -331 -85 -370 -4 -22 -12 -65 -20 -95 -61 -243 -89 -608 -64 -850 7 -69 13 -156 14 -195 3 -75 27 -280 50 -410 7 -44 19 -123 25 -175 6 -52 16 -117 21 -145 5 -27 11 -125 14 -216 2 -91 12 -213 21 -270 18 -117 30 -226 43 -409 5 -69 15 -199 21 -290 14 -184 8 -663 -10 -795 -13 -98 -27 -151 -78 -280 -88 -227 -195 -391 -330 -510 -163 -144 -397 -253 -666 -311 -82 -17 -346 -33 -471 -28 -124 5 -323 40 -425 76 -167 59 -190 61 -190 14 0 -30 42 -65 164 -134 84 -48 310 -148 386 -171 230 -68 380 -85 593 -65 274 25 341 34 457 59 139 30 251 53 474 95 156 30 188 33 380 34 272 1 329 -6 541 -69 166 -49 331 -92 390 -100 28 -4 77 -13 110 -21 33 -7 86 -15 118 -18 31 -3 61 -7 66 -10 5 -3 60 -10 123 -16 258 -22 575 42 848 171 322 153 503 270 487 312 -10 27 -47 20 -148 -29 -166 -81 -337 -142 -501 -180 -92 -21 -132 -24 -290 -24 -217 0 -319 14 -508 71 -173 52 -223 76 -390 194 -108 75 -179 149 -270 280 -41 59 -145 261 -170 330 -79 218 -126 378 -149 510 -25 142 -37 577 -22 756 36 412 60 599 131 1044 11 72 22 153 25 180 3 28 9 64 14 80 15 48 33 318 47 675 7 191 -10 544 -32 669 -23 133 -84 397 -115 499 -11 35 -24 95 -30 135 -17 119 -26 168 -42 247 -82 399 -86 444 -58 630 27 177 33 247 33 390 1 176 -14 284 -68 481 -34 127 -128 418 -146 452 -9 18 -43 23 -52 9z"/>
+                  <path d="M4486 9589 c-93 -62 -318 -335 -409 -498 -74 -132 -135 -295 -163 -438 -22 -110 -25 -145 -20 -248 8 -148 25 -265 69 -465 38 -171 76 -311 112 -410 63 -172 86 -384 86 -795 1 -446 -30 -766 -105 -1102 -14 -62 -30 -152 -36 -200 -7 -48 -18 -113 -25 -143 -13 -54 -44 -251 -44 -280 1 -8 -2 -49 -5 -90 -7 -89 -7 -496 -1 -700 15 -485 85 -734 312 -1115 66 -109 128 -177 236 -256 96 -70 327 -174 442 -199 22 -4 78 -16 125 -26 136 -29 473 -18 649 22 110 25 369 121 447 165 102 59 108 63 249 182 254 213 351 435 300 687 -23 113 -92 290 -125 320 -3 3 -12 18 -20 34 -24 46 -243 269 -307 312 -32 21 -63 44 -70 50 -27 25 -182 93 -232 102 -103 18 -181 -34 -167 -112 7 -34 59 -109 135 -192 130 -144 221 -379 205 -534 -8 -83 -21 -113 -80 -189 -77 -99 -214 -181 -362 -217 -147 -35 -431 5 -583 81 -60 31 -187 125 -237 176 -60 61 -124 160 -138 212 -25 96 -55 348 -51 432 10 212 61 331 214 498 60 66 416 336 546 415 34 21 88 58 119 82 31 25 78 58 105 75 54 33 188 147 218 185 11 14 45 53 75 86 107 119 147 190 195 340 17 54 22 158 10 209 -11 43 -82 177 -118 221 -156 189 -474 325 -757 324 -156 -1 -251 -40 -249 -103 1 -66 51 -122 169 -191 32 -19 92 -62 133 -96 85 -70 118 -125 142 -242 38 -178 -4 -300 -140 -411 -88 -71 -157 -103 -250 -115 -99 -13 -177 -2 -249 33 -140 68 -190 157 -220 391 -20 149 -20 313 0 479 32 278 43 438 43 630 -1 286 -8 325 -125 645 -37 102 -82 226 -99 275 -93 258 -136 479 -135 709 0 268 42 413 224 776 84 166 93 193 72 225 -22 33 -53 32 -110 -6z"/>
+                  <path d="M2356 9578 c-18 -25 -18 -25 66 -107 74 -72 97 -105 159 -226 79 -155 120 -281 144 -438 17 -113 20 -376 6 -457 -49 -272 -64 -335 -124 -500 -35 -98 -95 -225 -128 -272 -11 -14 -33 -59 -50 -100 -16 -40 -34 -82 -39 -93 -5 -11 -21 -63 -36 -115 -32 -112 -42 -235 -32 -382 9 -120 84 -512 122 -633 61 -193 72 -414 26 -509 -29 -61 -118 -142 -198 -179 -63 -30 -74 -32 -182 -32 -106 0 -120 2 -178 29 -76 35 -120 82 -171 183 -63 127 -85 212 -84 326 2 86 5 106 28 150 36 69 117 152 185 188 55 30 103 61 151 98 33 26 55 104 40 143 -15 40 -97 93 -173 112 -163 40 -392 -2 -538 -98 -101 -67 -221 -188 -257 -261 -81 -160 -96 -339 -42 -498 46 -138 80 -189 213 -321 132 -129 246 -223 472 -385 200 -144 281 -210 394 -323 174 -174 290 -351 324 -498 23 -98 31 -261 17 -365 -13 -89 -55 -250 -72 -271 -5 -6 -15 -29 -23 -50 -35 -101 -160 -257 -261 -328 -68 -47 -115 -71 -235 -118 -154 -60 -324 -48 -533 38 -138 56 -178 89 -222 179 -61 124 -61 250 0 489 18 71 95 231 128 266 40 43 133 173 156 217 27 54 28 122 1 150 -48 53 -174 56 -258 7 -84 -49 -257 -209 -312 -290 -8 -12 -45 -64 -82 -116 -66 -93 -154 -251 -177 -318 -20 -60 -31 -218 -20 -300 27 -197 59 -274 169 -412 107 -132 241 -229 441 -318 220 -98 386 -125 714 -117 191 5 234 9 325 32 220 54 461 208 580 370 129 176 184 279 241 455 80 245 99 479 74 910 -9 146 -20 353 -25 460 -6 107 -14 249 -20 315 -22 265 -30 350 -35 365 -2 8 -9 64 -15 124 -5 60 -14 134 -20 165 -39 220 -64 358 -80 436 -57 274 -71 395 -64 549 8 165 15 198 101 456 87 261 105 327 127 470 54 352 71 688 41 843 -21 113 -97 325 -160 452 -119 238 -283 403 -453 455 -85 27 -127 26 -146 -2z"/>
+                </g>
+              </svg>
+            </div>
+            <div class="empty-title">Nasal&nbsp;Unwrap</div>
+            <div class="empty-sub">
+              Планирование реконструктивной операции<br>
+              по сегментации из 3D&nbsp;Slicer
+            </div>
+            <div class="empty-formats">
+              <span class="fm">.obj</span>
+            </div>
+            <button class="btn-open-big" id="btnOpenBig" style="margin-top:17px">
+              <svg width="14" height="14" viewBox="0 0 18 18" fill="none">
+                <path d="M2 5V14a1.5 1.5 0 001.5 1.5h11A1.5 1.5 0 0016 14V7.5A1.5 1.5 0 0014.5 6H9L7.5 4H3.5A1.5 1.5 0 002 5z" stroke="currentColor" stroke-width="1.3"/>
+                <path d="M7 10.5l2-2 2 2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+                <line x1="9" y1="8.5" x2="9" y2="13" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+              </svg>
+              Открыть файл
+            </button>
+            <div class="empty-hint">или перетащите .OBJ сюда</div>
+          </div>
+
+          <div class="spinner-overlay" id="spinner">
+            <div class="spinner"></div>
+            <div class="spinner-text" id="spinnerText">Обработка…</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel right">
+        <div class="card">
+          <div class="card-title">Статистика</div>
+          <div id="statsContent">
+            <div class="hint-text dim">Данные появятся после загрузки файла.</div>
+          </div>
+        </div>
+
+
+
+        <div class="card">
+          <div class="card-title">Рабочий процесс</div>
+          <ol class="ep-steps-pre"  id="workflowSteps">
+            <li data-step="data" >
+              <b>Данные</b> — загрузить OBJ файл.
+            </li>
+            <li data-step="inner">
+              <b>Поверхность</b> — автоматически выделить слизистую оболочку.
+            </li>
+            <li data-step="zones">
+              <b>Сегментация</b> — разделить слизистую на анатомические зоны.
+            </li>
+            <li data-step="unfold">
+              <b>Развёртка</b> — интеративное 2D-представление.
+            </li>
+          </ol>
+        </div>
+
+
+
+      </div>
+    </div>
+
+    <!-- Stage 02: INNER -->
+    <div class="stage" data-stage="inner">
+      <div class="panel left">
+        <div class="card">
+          <div class="card-title">Этап 02<span class="badge">Поверхность</span></div>
+          <div class="hint-text dim">
+            Отделим <span class="accent">слизистую оболочку</span> от наружной
+            ткани. Результат — самостоятельный слой, на котором дальше строятся
+            анатомические зоны и интерактивная развёртка.
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Как это работает</div>
+          <ol class="ep-steps-pre">
+            <li>Нажмите <b>«Запустить»</b> в центре окна.</li>
+            <li>Проверьте результат: <span class="accent">синее</span> — слизистая,
+                <span class="ep-grey">серое</span> — наружная сторона.</li>
+            <li>Скорректируйте маску вручную: <b>Кисть&nbsp;</b> добавляет,
+                <b>Ластик&nbsp;</b> убирает.</li>
+            <li><b>Перейти к этапу 3</b> — выполнится авточистка и откроется вкладка «Сегментация».</li>
+          </ol>
+        </div>
+
+      </div>
+
+      <div class="workarea">
+        <div class="viewport" id="viewportInner">
+          <div class="corner-deco tl"></div><div class="corner-deco tr"></div>
+          <div class="corner-deco bl"></div><div class="corner-deco br"></div>
+          <!-- Свой канвас и свой WebGL-рендерер. Инициализируется лениво при
+               первом открытии таба 2. Пока меша нет — скрыт через CSS, виден
+               empty-state. После сегментации — наоборот. -->
+          <canvas id="gl3d-inner" style="display:none;width:100%;height:100%;"></canvas>
+          <div class="empty-state" id="innerEmpty">
+            <div class="empty-title">Этап 2</div>
+            <div class="empty-sub">Нажмите «Запустить сегментацию» в левой панели</div>
+          </div>
+
+          <!-- Локальный спиннер этапа 02. Тот же класс .spinner-overlay,
+               что и у #spinner в stage 1 — стили из app.css работают
+               как есть. Управляется локальными хелперами в tab2-inner.js. -->
+          <div class="spinner-overlay" id="spinnerInner">
+            <div class="spinner"></div>
+            <div class="spinner-text" id="spinnerInnerText">Обработка…</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel right">
+        <div class="card">
+          <div class="card-title">Что увидите</div>
+          <div class="stat-row">
+            <span class="accent">синим</span>
+            <span class="stat-k">слизистая</span>
+          </div>
+          <div class="stat-row">
+            <span class="ep-grey">серым</span>
+            <span class="stat-k">наружная</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Инструменты</div>
+          <div class="hint-text dim" style="line-height:1.55">
+            <b><span class="accent">Кисть&nbsp;</span></b> — красит фейсы под курсором в слизистую.<br>
+            <b><span class="accent">Ластик&nbsp;</span></b> — снимает выделение.<br>
+            <b><span class="accent">ПКМ</span></b> — вращение меша в любой момент.<br>
+          </div>
+        </div>
+
+
+      </div>
+    </div>
+
+
+    <!-- Stage 03: ZONES -->
+<div class="stage" data-stage="zones">
+  <div class="panel left"></div>
+  <div class="workarea">
+    <div class="viewport">
+      <div class="corner-deco tl"></div><div class="corner-deco tr"></div>
+      <div class="corner-deco bl"></div><div class="corner-deco br"></div>
+      <div class="empty-state"></div>
+
+      <!-- Локальный спиннер этапа 03 — для runZoneSeg (computeLabels +
+           ensureViewer + commitZoneLabels). Текст обновляется по стадиям. -->
+      <div class="spinner-overlay" id="spinnerZones">
+        <div class="spinner"></div>
+        <div class="spinner-text" id="spinnerZonesText">Обработка…</div>
+      </div>
+    </div>
+  </div>
+  <div class="panel right"></div>
+</div>
+
+    <!-- Stage 04: UNFOLD -->
+    <div class="stage" data-stage="unfold">
+      <div class="panel left">
+        <div class="card">
+          <div class="card-title">Этап 04<span class="badge">Развёртка</span></div>
+          <div class="hint-text dim" style="line-height:1.55">
+            Слизистая «расправляется» в плоскую карту, чтобы измерять
+            <span class="accent">размеры дефектов</span> и
+            <span class="accent">площади лоскутов</span> без искажения от изгиба ткани.
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Что можно делать</div>
+          <div class="hint-text dim" style="line-height:1.65">
+            <span class="accent">Линейка</span> — расстояние между двумя точками на слизистой.<br>
+            <span class="accent">Область</span> — площадь и периметр выделенного участка.<br>
+            <span class="accent">Лассо</span> — обвести область быстро.<br>
+            <span class="accent">Замер</span> — диаметры перфорации.<br>
+            <span class="accent">Флап</span> — подбор размера лоскута.<br>
+            <span class="accent">Esc</span> — отмена действия инструмента.
+          </div>
+        </div>
+
+
+      </div>
+      <div class="workarea">
+        <div class="viewport">
+          <div class="corner-deco tl"></div><div class="corner-deco tr"></div>
+          <div class="corner-deco bl"></div><div class="corner-deco br"></div>
+          <div class="empty-state">
+            <div class="empty-title">Этап 4 — Развёртка</div>
+            <div class="empty-sub">Готово к построению. Нажмите «Построить развёртку».</div>
+          </div>
+
+          <!-- Локальный спиннер этапа 04 — buildUnfold() делает много шагов
+               (server check, LSCM+ARAP, fetch UV, computeDistortion и др.).
+               Раньше единственным фидбеком был поток toast'ов справа,
+               а в центре оставался белый прямоугольник. -->
+          <div class="spinner-overlay" id="spinnerUnfold">
+            <div class="spinner"></div>
+            <div class="spinner-text" id="spinnerUnfoldText">Обработка…</div>
+          </div>
+        </div>
+      </div>
+      <div class="panel right">
+        <div class="card">
+          <div class="card-title">Что увидите</div>
+          <div class="t4-views">
+            <div class="t4-view t4-view-3d">
+              <div class="t4-view-tag">3D</div>
+              <div class="t4-view-text">Исходная<br>поверхность</div>
+            </div>
+            <div class="t4-view t4-view-2d">
+              <div class="t4-view-tag">2D</div>
+              <div class="t4-view-text">Плоская<br>развёртка</div>
+            </div>
+          </div>
+          <div class="hint-text dim" style="line-height:1.5;font-size:11.5px">
+            Оба вью синхронизированы — измерение, поставленное на одном, сразу появится на другом.
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ═══ STATUS BAR ═══ -->
+  <div class="statusbar">
+    <div style="display:flex;align-items:center">
+      <div class="status-cell"><span class="sk">Этап</span><span class="sv accent" id="stStage">01 · Данные</span></div>
+      <div class="status-cell"><span class="sk">Меш</span><span class="sv" id="stMesh">—</span></div>
+    </div>
+    <div style="display:flex;align-items:center">
+      <div class="status-cell"><span class="sk">♥</span></div>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast-stack" id="toastStack"></div>
+
+</body>
+</html>

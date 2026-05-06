@@ -1,0 +1,22 @@
+# --- runtime ---
+flask>=3.0
+pywebview>=5.0
+numpy>=1.26
+trimesh>=4.0
+pymeshlab>=2023.12
+
+# --- build ---
+pyinstaller>=6.0
+scipy
+networkx
+
+pynrrd
+scikit-image
+pymeshfix
+
+SimpleITK
+scikit-image
+rtree
+
+embreex
+

@@ -1,24 +1,27 @@
 /* ─── core/tabs ────────────────────────────────────────────────
    Показ одной вкладки за раз (.stage.active).
    Gating: вкладки 02, 03, 04 заблокированы пока нет нужных данных.
+   Вкладка 00 (КТ-сегментация) — всегда доступна, это начальный этап.
 ──────────────────────────────────────────────────────────────── */
 (function () {
   'use strict';
   window.Tabs = {};
 
   const TAB_INFO = {
-    data:   { idx: '01', label: 'Данные' },
-    inner:  { idx: '02', label: 'Поверхность' },
-    zones:  { idx: '03', label: 'Сегментация' },
-    unfold: { idx: '04', label: 'Развёртка' },
+    segment: { idx: '01', label: 'Разметка КТ' },
+    data:    { idx: '02', label: 'Модель' },
+    inner:   { idx: '03', label: 'Слизистая' },
+    zones:   { idx: '04', label: 'Зоны' },
+    unfold:  { idx: '05', label: 'Развёртка' },
   };
 
   /* Вкладка доступна только если выполнен её gate */
   const gate = {
-    data:   () => true,
-    inner:  () => !!window.M.rawV,     // хотя бы сырой меш есть
-    zones:  () => !!window.M.V,        // закоммичен активный под-меш
-    unfold: () => !!window.M.zoneLabels,   // зоны посчитаны
+    segment: () => true,                   // начальный этап — всегда открыт
+    data:    () => true,
+    inner:   () => !!window.M.rawV,        // хотя бы сырой меш есть
+    zones:   () => !!window.M.V,           // закоммичен активный под-меш
+    unfold:  () => !!window.M.zoneLabels,  // зоны посчитаны
   };
 
   window.Tabs.switchTo = function (name) {

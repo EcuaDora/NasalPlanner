@@ -1,22 +1,39 @@
-# --- runtime ---
-flask>=3.0
-pywebview>=5.0
-numpy>=1.26
-trimesh>=4.0
-pymeshlab>=2023.12
+# ══════════════════════════════════════════════════════════════════════
+#  Nasal Planner — зависимости САМОГО ПРИЛОЖЕНИЯ
+# ══════════════════════════════════════════════════════════════════════
+#
+#  Окружение, из которого собирается .exe (.venv-build) и запускается
+#  entry.py при разработке.
+#
+#  ЗДЕСЬ НЕТ torch, monai, SimpleITK, pymeshlab — они живут во ВТОРОМ
+#  окружении и вызываются как внешний процесс
+#  (см. requirements-inference.txt). Приложение весит ~250 МБ,
+#  torch с зависимостями — ещё 2-4 ГБ.
+#
+#  УСТАНОВКА
+#      python -m venv .venv-build
+#      .\.venv-build\Scripts\activate
+#      pip install -r requirements.txt
+#
 
-# --- build ---
-pyinstaller>=6.0
-scipy
+# ══════════════════════════════════════════════════════════════════════
+
+# ── Веб-сервер ────────────────────────────────────────────────────────
+flask==3.1.0
+
+pywebview==6.2.1
+pythonnet ; sys_platform == "win32"
+trimesh==4.10.1
+numpy==2.2.6
+scipy==1.15.3
 networkx
 
-pynrrd
-scikit-image
+rtree
+embreex
+
 pymeshfix
 
-SimpleITK
-scikit-image
-rtree
+pynrrd
 
-embreex
+pyinstaller
 

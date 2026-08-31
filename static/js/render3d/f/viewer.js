@@ -365,6 +365,24 @@
       setOrbitDistance: d => {
         if (d > 0 && Number.isFinite(d)) st.orbit.dist = d;
       },
+      getOrbit: () => ({
+        target: st.orbit.target.toArray(),
+        theta:  st.orbit.theta,
+        phi:    st.orbit.phi,
+        dist:   st.orbit.dist,
+      }),
+      setOrbit: o => {
+        if (!o) return;
+        if (Array.isArray(o.target) && o.target.length === 3) {
+          st.orbit.target.fromArray(o.target);
+        }
+        if (Number.isFinite(o.theta)) st.orbit.theta = o.theta;
+        if (Number.isFinite(o.phi)) {
+          const E = 0.05;   // тот же кламп, что в installMouseControls
+          st.orbit.phi = Math.max(E, Math.min(Math.PI - E, o.phi));
+        }
+        if (Number.isFinite(o.dist) && o.dist > 0) st.orbit.dist = o.dist;
+      },
     };
   }
 

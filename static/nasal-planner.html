@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>NASAL UNWRAP</title>
+  <!-- Без явной ссылки браузер сам просит /favicon.ico и получает 404
+       при каждой загрузке. Иконка в проекте есть — та же, что у .exe. -->
+  <link rel="icon" href="logo.ico" type="image/x-icon">
   <link rel="stylesheet" href="css/fonts.css">
   <link rel="stylesheet" href="css/app.css">
   <style>
@@ -79,11 +82,20 @@
   <script defer src="js/core/theme.js"></script>
   <script defer src="js/core/tabs.js"></script>
   <script defer src="js/geom/face-geom.js"></script>
+  <script defer src="js/geom/mesh-split.js"></script>
+  <script defer src="js/geom/uv-canonical.js"></script>
+  <script defer src="js/ui/dialog.js"></script>
+  <script defer src="js/io/session-archive.js"></script>
   <script defer src="js/io/obj-parser.js"></script>
   <script defer src="js/io/ct-loader.js"></script>
+  <script defer src="js/io/nrrd.js"></script>
+  <script defer src="js/tabs/tab0-segment.js"></script>
   <script defer src="js/io/file-loader.js"></script>
-  <script defer src="js/render3d/viewer.js"></script>
-  <script defer src="js/ui/file-dialog.js"></script>
+  <script defer src="js/render3d/f/viewer.js"></script>
+  <!-- js/ui/file-dialog.js убран: файла нет в проекте, каждая загрузка
+       страницы давала 404 в журнале сервера. Ничего из модуля не
+       используется — единственное упоминание в коде это комментарий
+       в file-loader.js о сбросе его старых слушателей. -->
   <script defer src="js/tabs/tab1-data.js"></script>
   <script defer src="js/tabs/tab2-inner.js"></script>
   <script defer src="js/tabs/tab3-zones.js"></script>
@@ -129,37 +141,51 @@
 
   <!-- ═══ TAB STRIP ═══ -->
   <div class="tab-strip" id="tabStrip">
-    <button class="tab active" data-tab="data"><span class="tab-idx">01</span>Данные</button>
-    <button class="tab" data-tab="inner" disabled><span class="tab-idx">02</span>Поверхность</button>
-    <button class="tab" data-tab="zones" disabled><span class="tab-idx">03</span>Сегментация</button>
-    <button class="tab" data-tab="unfold" disabled><span class="tab-idx">04</span>Развёртка</button>
+    <button class="tab active" data-tab="segment"><span class="tab-idx">01</span>Разметка КТ</button>
+    <button class="tab" data-tab="data"><span class="tab-idx">02</span>Модель</button>
+    <button class="tab" data-tab="inner" disabled><span class="tab-idx">03</span>Слизистая</button>
+    <button class="tab" data-tab="zones" disabled><span class="tab-idx">04</span>Зоны</button>
+    <button class="tab" data-tab="unfold" disabled><span class="tab-idx">05</span>Развёртка</button>
   </div>
 
-  <!-- ═══ BODY — 4 STAGES ═══ -->
+  <!-- ═══ BODY — STAGES ═══ -->
   <div class="body">
 
+    <!-- Stage 00: SEGMENT (КТ-сегментация) -->
+    <div class="stage active" data-stage="segment">
+      <div class="panel left"><!-- заполняется tab0-segment.js --></div>
+      <div class="workarea">
+        <div class="viewport">
+          <div class="corner-deco tl"></div><div class="corner-deco tr"></div>
+          <div class="corner-deco bl"></div><div class="corner-deco br"></div>
+          <div class="empty-state"><!-- заполняется JS: кнопка запуска --></div>
+          <div id="segEditorRoot"><!-- редактор срезов монтируется сюда --></div>
+          <div class="spinner-overlay" id="spinnerSegment">
+            <div class="spinner"></div>
+            <div class="spinner-text" id="spinnerSegmentText">Обработка…</div>
+          </div>
+        </div>
+      </div>
+      <div class="panel right"><!-- заполняется tab0-segment.js --></div>
+    </div>
+
     <!-- Stage 01: DATA -->
-    <div class="stage active" data-stage="data">
+    <div class="stage" data-stage="data">
       <div class="panel left">
         <div class="card">
           <div class="card-title">Исходный файл<span class="badge" id="srcBadge">—</span></div>
           <div id="srcInfo"></div>
         </div>
 
-        <div class="card" id="controlsCard">
-          <div class="card-title">Управление</div>
-          <div class="hint-text dim" style="line-height:1.65">
+        <details class="card" id="controlsCard" open>
+          <summary class="card-title">Управление мышью</summary>
+          <div class="hint-text dim" style="line-height:1.65;margin-top:9px">
             <span class="accent">ЛКМ + тяга</span>  — вращение<br>
             <span class="accent">ПКМ</span> (или Shift+ЛКМ) — сдвиг<br>
             <span class="accent">Колесо</span> — масштаб<br>
             <span class="accent">2× ЛКМ</span> — вернуться к центру
           </div>
-        </div>
-
-
-
-
-
+        </details>
       </div>
 
       <div class="workarea">
@@ -208,35 +234,13 @@
       </div>
 
       <div class="panel right">
+
         <div class="card">
-          <div class="card-title">Статистика</div>
+          <div class="card-title">Модель<span class="badge" id="statsBadge" style="display:none">проверена</span></div>
           <div id="statsContent">
             <div class="hint-text dim">Данные появятся после загрузки файла.</div>
           </div>
         </div>
-
-
-
-        <div class="card">
-          <div class="card-title">Рабочий процесс</div>
-          <ol class="ep-steps-pre"  id="workflowSteps">
-            <li data-step="data" >
-              <b>Данные</b> — загрузить OBJ файл.
-            </li>
-            <li data-step="inner">
-              <b>Поверхность</b> — автоматически выделить слизистую оболочку.
-            </li>
-            <li data-step="zones">
-              <b>Сегментация</b> — разделить слизистую на анатомические зоны.
-            </li>
-            <li data-step="unfold">
-              <b>Развёртка</b> — интеративное 2D-представление.
-            </li>
-          </ol>
-        </div>
-
-
-
       </div>
     </div>
 
@@ -244,7 +248,7 @@
     <div class="stage" data-stage="inner">
       <div class="panel left">
         <div class="card">
-          <div class="card-title">Этап 02<span class="badge">Поверхность</span></div>
+          <div class="card-title">Этап 03<span class="badge">Слизистая</span></div>
           <div class="hint-text dim">
             Отделим <span class="accent">слизистую оболочку</span> от наружной
             ткани. Результат — самостоятельный слой, на котором дальше строятся
@@ -260,7 +264,7 @@
                 <span class="ep-grey">серое</span> — наружная сторона.</li>
             <li>Скорректируйте маску вручную: <b>Кисть&nbsp;</b> добавляет,
                 <b>Ластик&nbsp;</b> убирает.</li>
-            <li><b>Перейти к этапу 3</b> — выполнится авточистка и откроется вкладка «Сегментация».</li>
+            <li><b>Продолжить</b> — выполнится авточистка и откроется вкладка «Зоны».</li>
           </ol>
         </div>
 
@@ -275,7 +279,7 @@
                empty-state. После сегментации — наоборот. -->
           <canvas id="gl3d-inner" style="display:none;width:100%;height:100%;"></canvas>
           <div class="empty-state" id="innerEmpty">
-            <div class="empty-title">Этап 2</div>
+            <div class="empty-title">Этап 3</div>
             <div class="empty-sub">Нажмите «Запустить сегментацию» в левой панели</div>
           </div>
 
@@ -340,25 +344,54 @@
     <div class="stage" data-stage="unfold">
       <div class="panel left">
         <div class="card">
-          <div class="card-title">Этап 04<span class="badge">Развёртка</span></div>
+          <div class="card-title">Этап 05<span class="badge">Развёртка</span></div>
           <div class="hint-text dim" style="line-height:1.55">
-            Слизистая «расправляется» в плоскую карту, чтобы измерять
-            <span class="accent">размеры дефектов</span> и
-            <span class="accent">площади лоскутов</span> без искажения от изгиба ткани.
+            Слизистая «расправляется» в плоскую карту — чтобы видеть всю
+            поверхность сразу и измерять <span class="accent">размеры дефектов</span>
+            и <span class="accent">площади лоскутов</span>.
           </div>
         </div>
 
-        <div class="card">
-          <div class="card-title">Что можно делать</div>
-          <div class="hint-text dim" style="line-height:1.65">
-            <span class="accent">Линейка</span> — расстояние между двумя точками на слизистой.<br>
-            <span class="accent">Область</span> — площадь и периметр выделенного участка.<br>
-            <span class="accent">Лассо</span> — обвести область быстро.<br>
-            <span class="accent">Замер</span> — диаметры перфорации.<br>
-            <span class="accent">Флап</span> — подбор размера лоскута.<br>
+        <details class="card" id="unfoldGuideCard" open>
+          <summary class="card-title">Что можно делать</summary>
+          <div class="hint-text dim" style="line-height:1.65;margin-top:10px">
+            <span class="accent">Линейка</span> — расстояние между двумя точками.<br>
+            <span class="accent">По точкам</span> — площадь по контуру из кликов.<br>
+            <span class="accent">Обводкой</span> — то же, но обвести мышью.<br>
+            <span class="accent">Перфорация</span> — диаметры и площадь дефекта.<br>
+            <span class="accent">Лоскут</span> — подбор размера лоскута.<br>
             <span class="accent">Esc</span> — отмена действия инструмента.
           </div>
-        </div>
+        </details>
+
+        <details class="card" id="unfoldAccuracyCard">
+          <summary class="card-title">Насколько точны измерения</summary>
+          <div class="hint-text dim" style="line-height:1.6;margin-top:10px">
+            <b>Числа берутся с трёхмерной модели, а не с плоской карты.</b>
+            Вы кликаете по карте, но длина и площадь считаются по настоящей
+            поверхности слизистой — так же, как если бы вы мерили гибкой
+            лентой прямо по ткани. Поэтому растяжение карты на результат
+            не влияет.<br><br>
+
+            <span class="accent">Что искажает карта.</span> Изогнутую поверхность
+            нельзя разложить на плоскость без растяжения — как нельзя разгладить
+            апельсиновую корку. Поэтому на карте один участок может
+            <i>выглядеть</i> крупнее другого, хотя на самом деле они равны.
+            Насколько — написано справа, обычно это доли миллиметра на сантиметр.
+            Смотрите на карту как на схему, а не как на чертёж в масштабе.<br><br>
+
+            <span class="accent">Где числа всё-таки ненадёжны.</span> Вокруг
+            перфораций карта разрезана, и путь между двумя точками может
+            обогнуть разрез не с той стороны — тогда длина получится завышенной.
+            Такие участки помечены: включите раскраску <b>Искажение</b>,
+            красное — не измерять, жёлтое — перепроверить. Их доля показана
+            справа в блоке «Надёжность измерений».<br><br>
+
+            <span class="accent">Если сомневаетесь</span> — переключитесь
+            на <b>3D-вью</b> слева и повторите замер там. В 3D разрезов нет,
+            и результат всегда корректен.
+          </div>
+        </details>
 
 
       </div>
@@ -367,7 +400,7 @@
           <div class="corner-deco tl"></div><div class="corner-deco tr"></div>
           <div class="corner-deco bl"></div><div class="corner-deco br"></div>
           <div class="empty-state">
-            <div class="empty-title">Этап 4 — Развёртка</div>
+            <div class="empty-title">Этап 5 — Развёртка</div>
             <div class="empty-sub">Готово к построению. Нажмите «Построить развёртку».</div>
           </div>
 
@@ -406,7 +439,7 @@
   <!-- ═══ STATUS BAR ═══ -->
   <div class="statusbar">
     <div style="display:flex;align-items:center">
-      <div class="status-cell"><span class="sk">Этап</span><span class="sv accent" id="stStage">01 · Данные</span></div>
+      <div class="status-cell"><span class="sk">Этап</span><span class="sv accent" id="stStage">01 · Разметка КТ</span></div>
       <div class="status-cell"><span class="sk">Меш</span><span class="sv" id="stMesh">—</span></div>
     </div>
     <div style="display:flex;align-items:center">

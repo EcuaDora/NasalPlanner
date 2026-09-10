@@ -75,6 +75,18 @@ from urllib.error import URLError
 APP_VERSION = "2026.08.18"
 
 
+def _display_version(v: str = APP_VERSION) -> str:
+    parts = v.split(".")
+    if len(parts) == 3 and all(p.isdigit() for p in parts):
+        y, m, d = parts
+        if len(y) == 4:
+            return f"{d}-{m}-{y}"
+    return v
+
+
+APP_VERSION_DISPLAY = _display_version()
+
+
 def _frozen() -> bool:
     return bool(getattr(sys, "frozen", False))
 
@@ -143,11 +155,9 @@ def start_server(app, host: str, port: int) -> None:
 #                                  CLI
 # ════════════════════════════════════════════════════════════════════════════
 def _parse_args():
-    """Парсим CLI. parse_known_args чтобы не падать на неожиданных аргументах
-    (PyInstaller bootloader в режиме --onefile иногда подкидывает свои)."""
     p = argparse.ArgumentParser(
-        prog="Nasal Planner",
-        description="Nasal Planner — развёртка слизистой носовой полости",
+        prog="Septum Planner",
+        description="Septum Planner — карта слизистой носовой перегородки",
     )
     p.add_argument(
         "--load",
@@ -168,9 +178,6 @@ def _parse_args():
     return args
 
 
-# ════════════════════════════════════════════════════════════════════════════
-#                              Авто-загрузка файла
-# ════════════════════════════════════════════════════════════════════════════
 def _classify_file(path: str) -> str:
     """Определяем тип по расширению. Возвращает 'mesh_raw' / 'ct_raw' / ''."""
     name = os.path.basename(path).lower()
@@ -241,9 +248,7 @@ def _try_autoload(path: str, host: str, port: int) -> None:
         print(f"[entry] --load: ошибка загрузки: {e}", file=sys.stderr)
 
 
-# ════════════════════════════════════════════════════════════════════════════
-#                              UI (pywebview / browser)
-# ════════════════════════════════════════════════════════════════════════════
+
 def _find_icon() -> str:
     """Спек ищет static/icon.ico, потом static/logo.ico — здесь так же,
     иначе окно остаётся без иконки, когда в проекте только logo.ico."""
@@ -265,7 +270,7 @@ def run_in_window(url: str) -> bool:
 
     try:
         kwargs = dict(
-            title=f"Nasal Planner {APP_VERSION}",
+            title="Septum Planner",
             url=url,
             width=1280,
             height=800,
@@ -296,7 +301,7 @@ def run_in_window(url: str) -> bool:
 
                 title = kwargs["title"]
                 hwnd = 0
-                for _ in range(50):                 # окно появляется не мгновенно
+                for _ in range(50):
                     hwnd = u32.FindWindowW(None, title)
                     if hwnd:
                         break
@@ -368,9 +373,6 @@ def run_headless(url: str) -> None:
         print("\n[entry] Выход.")
 
 
-# ════════════════════════════════════════════════════════════════════════════
-#                                  main
-# ════════════════════════════════════════════════════════════════════════════
 def _set_app_id() -> None:
     if not sys.platform.startswith("win"):
         return
@@ -383,14 +385,14 @@ def _set_app_id() -> None:
 
 
 def main() -> None:
-    _set_app_id()          # до любых окон
+    _set_app_id()
     args = _parse_args()
 
     if args.version:
         print(APP_VERSION)
         return
 
-    print(f"[entry] Nasal Planner {APP_VERSION}", flush=True)
+    print(f"[entry] Septum Planner {APP_VERSION}", flush=True)
     print(f"[entry] frozen={_frozen()}  app_dir={app_dir()}", flush=True)
 
     static_dir = resource_path("static")

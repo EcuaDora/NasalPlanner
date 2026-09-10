@@ -64,7 +64,7 @@ def _ensure_package(name, pip_name=None):
 _ensure_package("nrrd", "pynrrd")
 
 
-NUM_CLASSES = 6  # default; перезаписывается _detect_num_classes() из checkpoint
+NUM_CLASSES = 6
 FEATURE_SIZE = 48
 TARGET_SPACING = (0.5, 0.5, 1.0)
 ROI_SIZE = (96, 96, 96)
@@ -73,7 +73,6 @@ SW_BATCH_SIZE = 2
 SW_OVERLAP = 0.5
 CROP_MARGIN = 10
 
-# Переопределения скорости (из аргументов CLI; None = авто по железу)
 _OVERLAP_OVERRIDE = None    # --overlap
 _THREADS_OVERRIDE = None    # --threads (число потоков CPU)
 
@@ -133,7 +132,6 @@ def _detect_model_config(ckpt_path: str) -> dict:
     ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
     sd = ckpt.get("state_dict", ckpt)
 
-    # --- num_classes ---
     candidates = []
     for k, v in sd.items():
         if not hasattr(v, "shape") or len(v.shape) != 5:
@@ -319,11 +317,6 @@ def resolve_input_to_volume(
     raise RuntimeError(f"Unsupported input: {input_path}")
 
 
-# ─────────────────────────────────────────────────────────────────────
-# Preprocessing: полностью SimpleITK (без MONAI spatial transforms)
-# MONAI Orientation/Spacing требуют nibabel и падают в segfault на Windows.
-# SimpleITK preprocessing + транспозиция (Z,Y,X)→(R,A,S) = надёжно.
-# ─────────────────────────────────────────────────────────────────────
 def _orient_ras(image: sitk.Image) -> sitk.Image:
     try:
         o = sitk.DICOMOrientImageFilter()
@@ -389,7 +382,6 @@ def _localize_face_roi(img: sitk.Image) -> sitk.Image:
     ny = max(1, int(round(TRAIN_FOV_MM[1] / sy)))
     nz = max(1, int(round(TRAIN_FOV_MM[2] / sz)))
 
-    # --- 1. body mask ---
     body = arr > -500
     if not body.any():
         print("[WARN] Пустая body mask, пропуск локализации", flush=True)
@@ -511,7 +503,6 @@ def preprocess_for_model(volume_path: str):
     # поэтому на полном DICOM без этой обрезки она выдаёт мусор.
     ras = _localize_face_roi(ras)
 
-    # 2. Resample
     resampled = _resample_spacing(ras, TARGET_SPACING)
 
     arr = sitk.GetArrayFromImage(resampled).astype(np.float32)  # (Z, Y, X) = (S, A, R)
@@ -519,12 +510,10 @@ def preprocess_for_model(volume_path: str):
           f"sp={tuple(round(s,3) for s in raw.GetSpacing())}")
     print(f"[INFO] Resampled: {arr.shape}, sp={tuple(round(s,3) for s in resampled.GetSpacing())}", flush=True)
 
-    # 3. Intensity
     a_min, a_max = INTENSITY_WINDOW
     arr = np.clip(arr, a_min, a_max)
     arr = (arr - a_min) / (a_max - a_min + 1e-8)
 
-    # 4. CropForeground
     fg = arr > 0
     if fg.any():
         coords = np.argwhere(fg)
@@ -537,20 +526,16 @@ def preprocess_for_model(volume_path: str):
         crop_off = np.array([0, 0, 0])
     print(f"[INFO] After crop: {arr_crop.shape}", flush=True)
 
-    # 5. Transpose (S, A, R) → (R, A, S) — match MONAI RAS axis order
     arr_ras = np.ascontiguousarray(np.transpose(arr_crop, (2, 1, 0)))
 
-    # 6. Build RAS affine for nibabel roundtrip
     sp = resampled.GetSpacing()       # (sx, sy, sz)
     origin_lps = np.array(resampled.GetOrigin())
     D = np.array(resampled.GetDirection()).reshape(3, 3)
     S_diag = np.diag(list(sp))
 
-    # Crop offset in XYZ = (crop_off[2], crop_off[1], crop_off[0])
     crop_xyz = np.array([crop_off[2], crop_off[1], crop_off[0]], dtype=np.float64)
     origin_crop_lps = origin_lps + D @ S_diag @ crop_xyz
 
-    # LPS → RAS: negate L→R and P→A
     origin_ras = np.array([-origin_crop_lps[0], -origin_crop_lps[1], origin_crop_lps[2]])
     D_ras = D.copy()
     D_ras[0, :] *= -1
@@ -573,20 +558,13 @@ def save_prediction_to_original_space(
     ras_affine,
     original_ct_path: str,
 ) -> sitk.Image:
-    """
-    pred_np:     (R, A, S) array from model
-    ras_affine:  4x4 RAS affine (numpy or torch)
-    Returns:     SimpleITK image in original CT geometry
-    """
+
     aff = ras_affine.numpy() if torch.is_tensor(ras_affine) else np.array(ras_affine)
 
-    # 1. Transpose (R, A, S) → (S, A, R) = SimpleITK (Z, Y, X)
     pred_zyx = np.ascontiguousarray(np.transpose(pred_np, (2, 1, 0)))
 
-    # 2. Extract spacing from affine column norms
     sp = [np.linalg.norm(aff[:3, i]) for i in range(3)]
 
-    # 3. RAS → LPS direction: negate first two rows
     D_ras = np.zeros((3, 3))
     for i in range(3):
         D_ras[:, i] = aff[:3, i] / sp[i]
@@ -594,16 +572,13 @@ def save_prediction_to_original_space(
     D_lps[0, :] *= -1
     D_lps[1, :] *= -1
 
-    # 4. RAS → LPS origin: negate first two components
     origin_lps = [-aff[0, 3], -aff[1, 3], aff[2, 3]]
 
-    # 5. Create SimpleITK image
     pred_sitk = sitk.GetImageFromArray(pred_zyx.astype(np.uint8))
     pred_sitk.SetSpacing(sp)
     pred_sitk.SetOrigin(origin_lps)
     pred_sitk.SetDirection(D_lps.flatten().tolist())
 
-    # 6. Resample to original CT geometry
     original_ct = sitk.ReadImage(original_ct_path)
     rs = sitk.ResampleImageFilter()
     rs.SetReferenceImage(original_ct)
@@ -676,7 +651,6 @@ def postprocess_multiclass(
             print(f"[INFO]   class {cls_id}: бокс {cls_mask.shape} "
                   f"({frac*100:.0f}% объёма)", flush=True)
 
-        # Morphological closing
         if closing_radius_mm > 0:
             radius = tuple(max(1, int(round(closing_radius_mm / s))) for s in spacing_zyx)
             struct = np.zeros(tuple(2*r+1 for r in radius), dtype=bool)
@@ -684,21 +658,8 @@ def postprocess_multiclass(
             zz, yy, xx = np.ogrid[-ctr[0]:ctr[0]+1, -ctr[1]:ctr[1]+1, -ctr[2]:ctr[2]+1]
             struct = ((zz/radius[0])**2 + (yy/radius[1])**2 + (xx/radius[2])**2) <= 1.0
             cls_mask = ndimage.binary_closing(cls_mask > 0, structure=struct).astype(np.uint8)
-            gc.collect()                    # binary_closing оставляет временные копии
+            gc.collect()
 
-        # ── Чистка островков и выбор главной компоненты ──────────────
-        #
-        # Размеры всех компонент считаем ОДНИМ np.bincount по массиву
-        # меток. Прежний код падал с
-        #     _ArrayMemoryError: Unable to allocate 916 MiB
-        # в scipy.ndimage.sum(): она принимает index=range(1, num+1),
-        # внутри разворачивает его в массив и делает своё bincount,
-        # выделяя память по МАКСИМАЛЬНОЙ метке. На шумной маске
-        # с десятками тысяч островков это сотни мегабайт.
-        #
-        # Заодно ушёл цикл `for c in range(1, num+1)` с
-        # `(labeled == c).sum()`: он проходил по всему объёму на каждую
-        # компоненту — тысячи полных проходов вместо одного.
         labeled, num = ndimage.label(cls_mask > 0, output=_LBL)
         if num > 0:
             counts = np.bincount(labeled.ravel())
@@ -751,7 +712,6 @@ def save_as_seg_nrrd(mask_sitk: sitk.Image, output_path: str) -> None:
     # pynrrd index_order="F" expects (i, j, k) = (x, y, z)
     data_ijk = np.transpose(mask_arr, (2, 1, 0)).copy()
 
-    # Space directions from SimpleITK (LPS convention)
     d = list(direction)
     space_directions = np.array([
         [d[0]*spacing[0], d[1]*spacing[0], d[2]*spacing[0]],
@@ -983,25 +943,7 @@ def run_inference(
                 torch.set_num_interop_threads(max(1, ncpu // 2))
             except Exception:
                 pass
-            # bfloat16-autocast на CPU — ВЫКЛЮЧЕН.
-            #
-            # Здесь была строка
-            #     cpu_autocast = bool(getattr(torch.backends, "cpu", None)) or True
-            # с «or True» на конце: выражение истинно ВСЕГДА, независимо от
-            # поддержки bf16 процессором. Проверка наличия torch.backends.cpu
-            # ничего не решала, автокаст включался безусловно.
-            #
-            # Почему это плохо. bf16 держит 8 бит мантиссы против 24 у fp32 —
-            # логиты на границе классов дрожат, и после argmax маска идёт
-            # рваными краями и мелкими островками. Разметка выглядит шумнее
-            # при том же чекпойнте и том же входе.
-            #
-            # Выигрыша тоже нет: по замерам из README ускорения этапа bf16
-            # на этом CPU замедлял вдвое (нет аппаратной поддержки — эмуляция),
-            # и его тогда отвергли. Строка с «or True» осталась по недосмотру.
-            #
-            # Возвращать имеет смысл только под явным флагом и только после
-            # замера Dice на когорте.
+
             cpu_autocast = False
             print(f"[INFO] CPU mode: torch threads={torch.get_num_threads()}, "
                   f"autocast(bf16)={cpu_autocast}", flush=True)
